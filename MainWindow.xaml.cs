@@ -19,6 +19,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 using System.Windows.Controls.Primitives;
+using Microsoft.WindowsAPICodePack.Dialogs;
 
 namespace AudioPlayer
 {
@@ -44,13 +45,52 @@ namespace AudioPlayer
             dialog.Multiselect = true;
             if (dialog.ShowDialog() == true)
             {
-                foreach(var file in dialog.FileNames)
+                AddTrack(dialog.FileNames);
+            }
+        }
+
+        private void AddTrack(string[] fileNames)
+        {
+            foreach (var file in fileNames)
+            {
+                var filePathSplitted = file.Split('\\');
+                _playlistPaths.Add(file);
+                _playlist.Add(filePathSplitted[filePathSplitted.Length - 1].Split('.')[0]);
+            }
+            PlaylistBox.SelectedIndex = _playlist.Count - 1;
+        }
+
+        private void OpenPlaylist(object sender, RoutedEventArgs e)
+        {
+            CommonOpenFileDialog dialog = new CommonOpenFileDialog();
+            dialog.IsFolderPicker = true;
+            dialog.Multiselect = true;
+            if (dialog.ShowDialog() == CommonFileDialogResult.Ok)
+            {
+                _cancelTokenSource.Cancel();
+                _playlist.Clear();
+                _playlistPaths.Clear();
+                foreach (var directory in dialog.FileNames)
                 {
-                    var filePathSplitted = file.Split('\\');
-                    _playlistPaths.Add(file);
-                    _playlist.Add(filePathSplitted[filePathSplitted.Length - 1].Split('.')[0]);
+                    AddTrack(new DirectoryInfo(directory).GetFiles().Where(f => f.FullName.EndsWith(".mp3") || f.FullName.EndsWith(".wav"))
+                        .Select(f => f.FullName).ToArray());
                 }
-                PlaylistBox.SelectedIndex = _playlist.Count - 1;
+            }
+        }
+
+        private void SavePlaylist(object sender, RoutedEventArgs e)
+        {
+            CommonOpenFileDialog dialog = new CommonOpenFileDialog();
+            dialog.IsFolderPicker = true;
+            dialog.Multiselect = false;
+            if (dialog.ShowDialog() == CommonFileDialogResult.Ok)
+            {
+                for(int i = 0; i < _playlistPaths.Count; i++)
+                {
+                    string newPath = $"{dialog.FileName}\\{_playlist[i]}.{_playlistPaths[i].Split(".")[1]}";
+                    if(!File.Exists(newPath))
+                        File.Copy(_playlistPaths[i], newPath);
+                }
             }
         }
 
@@ -72,7 +112,10 @@ namespace AudioPlayer
 
         private void SelectTrack(object sender, SelectionChangedEventArgs e)
         {
-            PlayTrack(_playlistPaths[PlaylistBox.SelectedIndex]);
+            if(PlaylistBox.SelectedIndex >= 0 && PlaylistBox.SelectedIndex < _playlistPaths.Count && _playlistPaths.Count > 0)
+            {
+                PlayTrack(_playlistPaths[PlaylistBox.SelectedIndex]);
+            }
         }
 
         private void PlayTrack(string trackPath)
@@ -113,6 +156,7 @@ namespace AudioPlayer
                             if(_playlistPaths.Count == 1)
                             {
                                 _player = new MediaPlayer();
+                                _player.Volume = VolumeSlider.Value;
                                 SelectTrack(null, null);
                                 _cancelTokenSource.Cancel();
                                 return;
